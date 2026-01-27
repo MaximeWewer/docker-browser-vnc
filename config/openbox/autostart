@@ -1,0 +1,13 @@
+#!/bin/sh
+# =============================================================================
+# Openbox autostart - This file is regenerated at startup by start.sh
+# =============================================================================
+
+# Set background color
+xsetroot -solid "#1e1e2e" &
+
+# Wait for X to fully initialize
+sleep 1
+
+# Launch browser
+/usr/local/bin/launch-browser.sh &
