@@ -4,9 +4,31 @@
 # Supports Firefox and Chromium with their respective options
 # =============================================================================
 
-BROWSER="${BROWSER:-firefox}"
+# Detect browser - use env var if set, otherwise detect installed browser
+detect_browser() {
+    # If BROWSER env var is set and not empty, use it
+    if [ -n "$BROWSER" ]; then
+        echo "$BROWSER"
+        return
+    fi
+
+    # Auto-detect installed browser
+    if command -v firefox >/dev/null 2>&1; then
+        echo "firefox"
+    elif command -v chromium-browser >/dev/null 2>&1; then
+        echo "chromium"
+    elif command -v chromium >/dev/null 2>&1; then
+        echo "chromium"
+    else
+        echo "firefox"  # Default fallback
+    fi
+}
+
+BROWSER=$(detect_browser)
 
 log() { echo "[BROWSER] $1"; }
+
+log "Detected browser: $BROWSER"
 
 # Determine the URL to open
 # Priority: STARTING_URL > profile settings (if custom user-data mounted) > about:blank
