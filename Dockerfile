@@ -57,8 +57,8 @@ ENV DISPLAY=:0 \
     VNC_PW=changeme \
     # Browser: firefox or chromium
     BROWSER=${BROWSER} \
-    # Starting URL
-    STARTING_URL=about:blank \
+    # Starting URL (optional, uses browser profile settings if not set)
+    STARTING_URL="" \
     # User home directory
     HOME=/home/user \
     # Disable interactive prompts

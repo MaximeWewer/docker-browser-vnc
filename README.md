@@ -48,17 +48,25 @@ services:
 - **Web Browser**: Navigate to `http://localhost:6080` - no VNC client required
 - **VNC Client**: Connect to `localhost:5901` with your preferred VNC viewer
 
+|                    noVNC Interface                    |                  noVNC Login                  |
+| :---------------------------------------------------: | :-------------------------------------------: |
+| ![noVNC Interface](assets/images/noVNC_interface.png) | ![noVNC Login](assets/images/noVNC_login.png) |
+
+|                    Firefox example                    |                  Chromium example                  |
+| :---------------------------------------------------: | :------------------------------------------------: |
+| ![noVNC Interface](assets/images/firefox_example.png) | ![noVNC Login](assets/images/chromium_example.png) |
+
 ## Environment variables
 
-| Variable         | Default       | Description                              |
-| ---------------- | ------------- | ---------------------------------------- |
-| `BROWSER`        | `firefox`     | Browser to use (`firefox` or `chromium`) |
-| `VNC_PW`         | `changeme`    | VNC connection password                  |
-| `VNC_RESOLUTION` | `1920x1080`   | Display resolution                       |
-| `VNC_COL_DEPTH`  | `24`          | Color depth (bits)                       |
-| `VNC_PORT`       | `5901`        | Native VNC port                          |
-| `NOVNC_PORT`     | `6080`        | noVNC web port                           |
-| `STARTING_URL`   | `about:blank` | Initial URL to open                      |
+| Variable         | Default     | Description                                  |
+| ---------------- | ----------- | -------------------------------------------- |
+| `BROWSER`        | `firefox`   | Browser to use (`firefox` or `chromium`)     |
+| `VNC_PW`         | `changeme`  | VNC connection password                      |
+| `VNC_RESOLUTION` | `1920x1080` | Display resolution                           |
+| `VNC_COL_DEPTH`  | `24`        | Color depth (bits)                           |
+| `VNC_PORT`       | `5901`      | Native VNC port                              |
+| `NOVNC_PORT`     | `6080`      | noVNC web port                               |
+| `STARTING_URL`   | _(empty)_   | Initial URL (uses profile settings if empty) |
 
 ## Exposed ports
 
@@ -70,7 +78,7 @@ services:
 
 ## Browser customization
 
-Mount a volume to `/user-data` to customize browser profiles and settings.
+Mount a volume to `/user-data` to customize browser profiles and settings. If no `STARTING_URL` is provided and custom configuration exists, the browser will use the startup page defined in the profile settings.
 
 ### Directory structure
 
@@ -79,20 +87,38 @@ Mount a volume to `/user-data` to customize browser profiles and settings.
 ├── firefox-policies/
 │   └── policies.json       # Firefox enterprise policies
 ├── firefox-profile/
-│   ├── user.js             # Firefox preferences
-│   ├── bookmarks.html      # Bookmarks (optional)
-│   └── ...                 # Other profile files
+│   └── user.js             # Firefox preferences
 └── chromium-profile/
-    └── Preferences         # Chromium preferences
+    ├── Preferences         # Chromium preferences (JSON)
+    └── Bookmarks           # Chromium bookmarks (JSON)
 ```
 
-### Example: Custom Firefox bookmarks and policies
+### Example usage
 
 ```bash
+# Use provided examples
 docker run -d -p 6080:6080 \
-  -v /path/to/my-config:/user-data:ro \
+  -v $(pwd)/examples:/user-data:ro \
+  docker-browser-vnc
+
+# Firefox with policies only
+docker run -d -p 6080:6080 \
+  -v /path/to/firefox-policies:/user-data/firefox-policies:ro \
+  docker-browser-vnc
+
+# Chromium with custom profile
+docker run -d -p 6080:6080 -e BROWSER=chromium \
+  -v /path/to/chromium-profile:/user-data/chromium-profile:ro \
   docker-browser-vnc
 ```
+
+---
+
+## Firefox configuration
+
+Firefox supports two configuration methods: **policies** (enterprise/managed) and **user.js** (user preferences).
+
+> **Documentation**: [Firefox Enterprise Policies](https://mozilla.github.io/policy-templates/)
 
 ### Firefox policies example
 
@@ -103,40 +129,161 @@ Create `/user-data/firefox-policies/policies.json`:
   "policies": {
     "Homepage": {
       "URL": "https://example.com",
-      "Locked": true
+      "StartPage": "homepage"
     },
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
     "DisableTelemetry": true,
     "DisableFirefoxStudies": true,
+    "DisablePocket": true,
     "DisplayBookmarksToolbar": "always",
+    "NoDefaultBookmarks": true,
     "ManagedBookmarks": [
       {
         "toplevel_name": "Company Links"
       },
       {
-        "name": "Intranet",
-        "url": "https://intranet.example.com"
+        "name": "Example Site",
+        "url": "https://example.com"
+      },
+      {
+        "name": "GitHub",
+        "url": "https://github.com"
+      },
+      {
+        "name": "Search",
+        "children": [
+          { "name": "Google", "url": "https://google.com" },
+          { "name": "DuckDuckGo", "url": "https://duckduckgo.com" }
+        ]
       }
     ]
   }
 }
 ```
 
-### Firefox preferences example
+**Key policies:**
+
+- `Homepage.StartPage: "homepage"` - Open homepage on startup
+- `OverrideFirstRunPage: ""` - Disable first run page
+- `ManagedBookmarks` - Pre-configured bookmarks (read-only for users)
+
+### Firefox user.js example
 
 Create `/user-data/firefox-profile/user.js`:
 
 ```javascript
-// Set homepage
+// --- Homepage & Startup ---
 user_pref("browser.startup.homepage", "https://example.com");
+user_pref("browser.startup.page", 1); // 0=blank, 1=homepage, 3=restore session
 
-// Disable pocket
-user_pref("extensions.pocket.enabled", false);
+// --- Disable First Run & Welcome ---
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
 
-// Custom proxy settings
-user_pref("network.proxy.type", 1);
-user_pref("network.proxy.http", "proxy.example.com");
-user_pref("network.proxy.http_port", 8080);
+// --- New Tab Page ---
+user_pref("browser.newtabpage.enabled", false);
+user_pref("browser.newtabpage.activity-stream.showSponsored", false);
+user_pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
+
+// --- UI Customization ---
+user_pref("browser.toolbars.bookmarksToolbar", "always");
+user_pref("browser.uidensity", 1); // 0=normal, 1=compact, 2=touch
+
+// --- Privacy ---
+user_pref("privacy.donottrackheader.enabled", true);
+user_pref("privacy.trackingprotection.enabled", true);
+
+// --- Disable Annoyances ---
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 ```
+
+**Important:** `browser.startup.homepage_override.mstone: "ignore"` is required to prevent Firefox from showing its first-run page.
+
+---
+
+## Chromium configuration
+
+Chromium uses JSON configuration files for preferences and bookmarks.
+
+> **Documentation**: [Chromium Preferences](https://www.chromium.org/administrators/configuring-other-preferences/) | [Chromium Enterprise Policies](https://chromeenterprise.google/policies/)
+
+### Chromium Preferences example
+
+Create `/user-data/chromium-profile/Preferences`:
+
+```json
+{
+  "browser": {
+    "check_default_browser": false,
+    "show_home_button": true
+  },
+  "bookmark_bar": {
+    "show_on_all_tabs": true
+  },
+  "homepage": "https://example.com",
+  "homepage_is_newtabpage": false,
+  "session": {
+    "restore_on_startup": 4,
+    "startup_urls": ["https://example.com"]
+  },
+  "profile": {
+    "default_content_setting_values": {
+      "notifications": 2
+    }
+  }
+}
+```
+
+**Key settings:**
+
+- `restore_on_startup`: `4` = Open specific URLs, `1` = Restore last session, `5` = Open new tab
+- `startup_urls` - URLs to open on startup (requires `restore_on_startup: 4`)
+- `homepage` - URL for the home button (not the startup page)
+- `notifications: 2` - Block notification prompts
+
+### Chromium Bookmarks example
+
+Create `/user-data/chromium-profile/Bookmarks`:
+
+```json
+{
+  "checksum": "",
+  "roots": {
+    "bookmark_bar": {
+      "children": [
+        {
+          "name": "Example Site",
+          "type": "url",
+          "url": "https://example.com/"
+        },
+        {
+          "name": "GitHub",
+          "type": "url",
+          "url": "https://github.com/"
+        },
+        {
+          "name": "Search",
+          "type": "folder",
+          "children": [
+            { "name": "Google", "type": "url", "url": "https://google.com/" },
+            { "name": "DuckDuckGo", "type": "url", "url": "https://duckduckgo.com/" }
+          ]
+        }
+      ],
+      "name": "Bookmarks bar",
+      "type": "folder"
+    },
+    "other": { "children": [], "name": "Other bookmarks", "type": "folder" },
+    "synced": { "children": [], "name": "Mobile bookmarks", "type": "folder" }
+  },
+  "version": 1
+}
+```
+
+**Note:** The `checksum` field can be left empty; Chromium will recalculate it.
 
 ## Dynamic resolution
 
@@ -150,6 +297,8 @@ A resize button is available in the top-right corner of the noVNC interface:
 2. Click the **resize button** (top-right corner)
 3. When enabled (green), the resolution automatically adapts to your browser window size
 4. The setting is saved in localStorage
+
+![Auto-resize button](assets/images/auto_resize.png)
 
 ### Resize API (port 6081)
 
