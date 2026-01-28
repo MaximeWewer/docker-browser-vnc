@@ -32,15 +32,28 @@ docker run -d -p 5901:5901 -p 6080:6080 -p 6081:6081 \
 
 ```yaml
 services:
-  browser:
-    build: .
+  # Firefox (default)
+  firefox:
+    image: ghcr.io/maximewewer/docker-browser-vnc:latest
     ports:
       - "5901:5901"  # VNC
       - "6080:6080"  # noVNC (web)
       - "6081:6081"  # Resize API
     environment:
       - VNC_PW=mysecretpassword
-      - BROWSER=firefox
+      - STARTING_URL=https://example.com
+    volumes:
+      - ./my-config:/user-data:ro  # Optional: custom browser config
+
+  # Chromium
+  chromium:
+    image: ghcr.io/maximewewer/docker-browser-vnc:chromium
+    ports:
+      - "5902:5901"
+      - "6082:6080"
+      - "6083:6081"
+    environment:
+      - VNC_PW=mysecretpassword
 ```
 
 ## Accessing the browser
