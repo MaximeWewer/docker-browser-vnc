@@ -82,10 +82,8 @@ Mount a volume to `/user-data` to customize browser profiles and settings.
 │   ├── user.js             # Firefox preferences
 │   ├── bookmarks.html      # Bookmarks (optional)
 │   └── ...                 # Other profile files
-├── chromium-profile/
-│   └── Preferences         # Chromium preferences
-└── desktop/
-    └── *.desktop           # Desktop shortcuts
+└── chromium-profile/
+    └── Preferences         # Chromium preferences
 ```
 
 ### Example: Custom Firefox bookmarks and policies

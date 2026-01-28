@@ -125,7 +125,6 @@ RUN adduser -D -u 1000 -h /home/user -s /bin/bash user && \
         /home/user/.config/openbox \
         /home/user/.mozilla/firefox \
         /home/user/.config/chromium \
-        /home/user/Desktop \
         /home/user/Downloads && \
     # Set permissions
     chown -R user:user /home/user

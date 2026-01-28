@@ -35,7 +35,7 @@ echo ""
 # =============================================================================
 log "Preparing directories..."
 
-mkdir -p ~/.vnc ~/.config/openbox ~/.mozilla/firefox ~/.config/chromium ~/Desktop ~/Downloads
+mkdir -p ~/.vnc ~/.config/openbox ~/.mozilla/firefox ~/.config/chromium ~/Downloads
 
 # =============================================================================
 # Configure VNC password
@@ -179,14 +179,6 @@ setup_user_data() {
     if [ -d "$user_dir/chromium-profile" ]; then
         log "Copying custom Chromium profile..."
         cp -a "$user_dir/chromium-profile/"* "$HOME/.config/chromium/Default/" 2>/dev/null || true
-    fi
-
-    # Link Desktop files if present
-    if [ -d "$user_dir/desktop" ]; then
-        log "Linking Desktop files..."
-        for f in "$user_dir/desktop"/*; do
-            [ -e "$f" ] && ln -sf "$f" "$HOME/Desktop/" 2>/dev/null || true
-        done
     fi
 
     log "Custom user data loaded"
