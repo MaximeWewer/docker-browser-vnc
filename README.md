@@ -73,7 +73,6 @@ services:
 
 | Variable         | Default     | Description                                  |
 | ---------------- | ----------- | -------------------------------------------- |
-| `BROWSER`        | `firefox`   | Browser to use (`firefox` or `chromium`)     |
 | `VNC_PW`         | `changeme`  | VNC connection password                      |
 | `VNC_RESOLUTION` | `1920x1080` | Display resolution                           |
 | `VNC_COL_DEPTH`  | `24`        | Color depth (bits)                           |

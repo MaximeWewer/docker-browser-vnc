@@ -4,14 +4,8 @@
 # Supports Firefox and Chromium with their respective options
 # =============================================================================
 
-# Detect browser - use env var if set, otherwise detect installed browser
+# Detect browser
 detect_browser() {
-    # If BROWSER env var is set and not empty, use it
-    if [ -n "$BROWSER" ]; then
-        echo "$BROWSER"
-        return
-    fi
-
     # Auto-detect installed browser
     if command -v firefox >/dev/null 2>&1; then
         echo "firefox"

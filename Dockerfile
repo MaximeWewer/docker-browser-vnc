@@ -36,10 +36,7 @@ RUN apk add --no-cache wget ca-certificates && \
 # =============================================================================
 FROM alpine:3.23
 
-LABEL description="Lightweight VNC browser with noVNC"
-LABEL version="1.0"
-
-ARG BROWSER=firefox
+ARG BROWSER
 
 # ---------------------------------------------------------------------------
 # Environment variables
@@ -53,8 +50,6 @@ ENV DISPLAY=:0 \
     VNC_COL_DEPTH=24 \
     # VNC password
     VNC_PW=changeme \
-    # Browser: firefox or chromium
-    BROWSER=${BROWSER} \
     # Starting URL (optional, uses browser profile settings if not set)
     STARTING_URL="" \
     # User home directory
