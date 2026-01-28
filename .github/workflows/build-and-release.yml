@@ -1,0 +1,372 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+      - '*.*.*-*'
+  workflow_dispatch:
+    inputs:
+      force_version:
+        # Versioning pattern: YEAR.MONTH.INDEX_OF_TAG (+1 at each tag)
+        description: 'Force a specific version (optional, format: YYYY.MM.X)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/docker-browser-vnc
+
+jobs:
+  # =============================================================================
+  # Job 1: Prepare build - Extract version and validate
+  # =============================================================================
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
+      image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
+      repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Convert names to lowercase
+        id: lowercase
+        run: |
+          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          echo "image_name_lower=${IMAGE_NAME_LOWER}" >> $GITHUB_OUTPUT
+          echo "repository_owner_lower=${OWNER_LOWER}" >> $GITHUB_OUTPUT
+
+          echo "Image name (lowercase): ${IMAGE_NAME_LOWER}"
+          echo "Repository owner (lowercase): ${OWNER_LOWER}"
+
+      - name: Generate version
+        id: get_version
+        run: |
+          # If triggered by a tag push, use the tag
+          if [ "${{ github.event_name }}" == "push" ]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            echo "Using tag: $VERSION"
+          # If force_version is provided in workflow_dispatch, use it
+          elif [ -n "${{ github.event.inputs.force_version }}" ]; then
+            VERSION="${{ github.event.inputs.force_version }}"
+            echo "Using forced version: $VERSION"
+          else
+            # Auto-generate version based on YEAR.MONTH.INDEX pattern
+            git fetch --tags
+
+            YEAR_MONTH=$(date +'%Y.%m')
+
+            LATEST_TAG=$(git tag -l "${YEAR_MONTH}.*" | sort -V | tail -n 1)
+
+            if [ -z "$LATEST_TAG" ]; then
+              VERSION="${YEAR_MONTH}.1"
+            else
+              PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/^.*\.//')
+              NEW_PATCH=$((PATCH_VERSION + 1))
+              VERSION="${YEAR_MONTH}.${NEW_PATCH}"
+            fi
+            echo "Auto-generated version: $VERSION"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+          # Check if this is a pre-release (contains -, alpha, beta, rc)
+          if [[ "$VERSION" =~ - ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Release version: ${VERSION}"
+
+  # =============================================================================
+  # Job 2: Build Docker Images (Firefox & Chromium)
+  # =============================================================================
+  build-images:
+    name: Build ${{ matrix.browser }} image
+    runs-on: ubuntu-latest
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - firefox
+          - chromium
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Docker metadata and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.version }}-${{ matrix.browser }}
+            type=raw,value=${{ matrix.browser }}
+          labels: |
+            org.opencontainers.image.title=Docker Browser VNC (${{ matrix.browser }})
+            org.opencontainers.image.description=A lightweight Docker container providing ${{ matrix.browser }} browser accessible via VNC and noVNC (web-based)
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.vendor=Maxime Wewer
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        env:
+          DOCKER_BUILD_SUMMARY: false
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            BROWSER=${{ matrix.browser }}
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,oci-mediatypes=true
+
+  # =============================================================================
+  # Job 3: Create version tag and generate SBOM
+  # =============================================================================
+  finalize-images:
+    name: Finalize images
+    runs-on: ubuntu-latest
+    needs: [prepare, build-images]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GitHub container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag Firefox as latest
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }} \
+            -t ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest \
+            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-firefox
+
+      - name: Inspect images
+        run: |
+          echo "### Firefox image"
+          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-firefox'
+          echo ""
+          echo "### Chromium image"
+          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-chromium'
+          echo ""
+          echo "### Latest (Firefox)"
+          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest'
+
+      - name: Generate SBOM for Firefox
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-firefox
+          format: spdx-json
+          output-file: sbom-firefox.spdx.json
+
+      - name: Generate SBOM for Chromium
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-chromium
+          format: spdx-json
+          output-file: sbom-chromium.spdx.json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-*.spdx.json
+          retention-days: 1
+
+  # =============================================================================
+  # Job 4: Create GitHub release
+  # =============================================================================
+  create-release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    needs: [prepare, finalize-images]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom
+          path: sbom
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Fetch all tags from remote to ensure we have the latest
+          git fetch --tags
+
+          # Get the previous tag (exclude current version if it exists)
+          CURRENT_VERSION="${{ needs.prepare.outputs.version }}"
+          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_VERSION}$" | head -n 1)
+
+          # Generate changelog
+          cat << EOF > release_notes.md
+          ## Docker Browser VNC ${{ needs.prepare.outputs.version }}
+
+          ### Docker images
+
+          | Browser | Image | Tag |
+          |---------|-------|-----|
+          | Firefox (default) | \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}\` | \`${{ needs.prepare.outputs.version }}\` or \`latest\` |
+          | Firefox | \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}\` | \`${{ needs.prepare.outputs.version }}-firefox\` or \`firefox\` |
+          | Chromium | \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}\` | \`${{ needs.prepare.outputs.version }}-chromium\` or \`chromium\` |
+
+          \`\`\`bash
+          # Firefox (default)
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
+
+          # Chromium
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-chromium
+          \`\`\`
+
+          ### What's Changed
+
+          EOF
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Changes since ${PREVIOUS_TAG} (last 10 events):" >> release_notes.md
+            echo "" >> release_notes.md
+
+            # Create a temporary file to store all events with timestamps
+            TEMP_EVENTS=$(mktemp)
+
+            # Get all commits with their timestamps (excluding merge commits)
+            git log --all --pretty=format:"%at|commit|%h|%s" --grep="Merge pull request\|Merge branch" --invert-grep -n 20 > "$TEMP_EVENTS"
+
+            # Get merged PRs with timestamps
+            gh pr list --state merged --limit 20 --json number,title,url,mergedAt --jq '.[] | "\(.mergedAt | fromdateiso8601)|pr|#\(.number)|\(.title)|\(.url)"' >> "$TEMP_EVENTS" 2>/dev/null || true
+
+            # Sort by timestamp (newest first) and take only the first 10
+            EVENTS_LIST=$(sort -t'|' -k1 -rn "$TEMP_EVENTS" | head -10 | while IFS='|' read -r timestamp type id title url; do
+              if [ "$type" = "commit" ]; then
+                echo "- **Commit** $id: $title"
+              elif [ "$type" = "pr" ]; then
+                echo "- **Pull request** [#${id}](${url}): ${title}"
+              fi
+            done)
+
+            # Clean up temp file
+            rm -f "$TEMP_EVENTS"
+
+            # Build the changelog content
+            if [ -n "$EVENTS_LIST" ]; then
+              echo "$EVENTS_LIST" >> release_notes.md
+            else
+              echo "No changes found." >> release_notes.md
+            fi
+
+            echo "" >> release_notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ needs.prepare.outputs.version }}" >> release_notes.md
+          else
+            echo "Initial release" >> release_notes.md
+          fi
+
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: Release ${{ needs.prepare.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ needs.prepare.outputs.is_prerelease }}
+          files: |
+            sbom/sbom-firefox.spdx.json
+            sbom/sbom-chromium.spdx.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: false
+
+      - name: Generate release summary
+        run: |
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          ## Release ${{ needs.prepare.outputs.version }} created successfully
+
+          ### Docker images published
+
+          | Browser | Tags |
+          |---------|------|
+          | Firefox | \`${{ needs.prepare.outputs.version }}\`, \`${{ needs.prepare.outputs.version }}-firefox\`, \`firefox\`, \`latest\` |
+          | Chromium | \`${{ needs.prepare.outputs.version }}-chromium\`, \`chromium\` |
+
+          ### Links
+          - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }})
+          - [Docker Images](https://${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }})
+          EOF
+
+  # =============================================================================
+  # Job 5: Post-Release verification
+  # =============================================================================
+  verify-release:
+    name: Verify release
+    runs-on: ubuntu-latest
+    needs: [prepare, create-release]
+    steps:
+      - name: Verify Docker images
+        run: |
+          echo "Verifying Firefox image..."
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-firefox
+          docker inspect ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-firefox
+
+          echo "Verifying Chromium image..."
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-chromium
+          docker inspect ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-chromium
+
+          echo "Verifying latest tag..."
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest
+
+      - name: Verification summary
+        run: |
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          ## Release verification completed
+
+          All images have been successfully verified:
+          - \`${{ needs.prepare.outputs.version }}-firefox\`
+          - \`${{ needs.prepare.outputs.version }}-chromium\`
+          - \`latest\`
+          EOF
