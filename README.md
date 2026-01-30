@@ -379,18 +379,42 @@ Container startup sequence:
 
 ### Components
 
-| Component         | Purpose                                              |
-| ----------------- | ---------------------------------------------------- |
-| **Xvnc**          | TigerVNC: combined X server + VNC server             |
-| **Openbox**       | Minimal window manager                               |
-| **noVNC**         | HTML5 VNC client (web access)                        |
-| **websockify**    | WebSocket to VNC protocol proxy                      |
-| **resize-server** | HTTP API for dynamic resolution changes              |
-| **supervisord**   | Process manager                                      |
+| Component         | Purpose                                  |
+| ----------------- | ---------------------------------------- |
+| **Xvnc**          | TigerVNC: combined X server + VNC server |
+| **Openbox**       | Minimal window manager                   |
+| **noVNC**         | HTML5 VNC client (web access)            |
+| **websockify**    | WebSocket to VNC protocol proxy          |
+| **resize-server** | HTTP API for dynamic resolution changes  |
+| **supervisord**   | Process manager                          |
 
-### VNC Resize Support
+### VNC resize support
 
-TigerVNC provides native **SetDesktopSize** support, allowing VNC clients (Guacamole, TigerVNC Viewer, RealVNC) to request resolution changes directly via the VNC protocol. This enables automatic resize when the client window is resized.
+TigerVNC provides native **SetDesktopSize** support, allowing VNC clients to request resolution changes directly via the VNC protocol. This enables automatic resize when the client window is resized.
+
+**Recommended VNC client**: [TigerVNC Viewer](https://tigervnc.org/)
+
+TigerVNC Viewer is recommended because:
+
+- Full **SetDesktopSize** support (automatic resize when you resize the viewer window)
+- Best compatibility with TigerVNC server
+- Available on Windows, macOS, and Linux
+
+**TigerVNC Viewer configuration**:
+
+1. Before connecting, click **Options**
+2. Go to the **Security** tab
+3. Uncheck all TLS/X509 options
+4. Keep only **VncAuth** checked
+5. Connect to `localhost:5901`
+
+| VNC Client      | SetDesktopSize | Compatibility           |
+| --------------- | -------------- | ----------------------- |
+| TigerVNC Viewer | Yes            | Excellent (recommended) |
+| RealVNC         | Yes            | Good                    |
+| Remmina         | Yes            | Good                    |
+| UltraVNC        | Partial        | Works, no auto-resize   |
+| TightVNC        | No             | Works, no auto-resize   |
 
 ## Health check
 
