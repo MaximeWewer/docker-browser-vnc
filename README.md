@@ -340,7 +340,7 @@ docker build -t docker-browser-vnc --build-arg BROWSER=chromium .
 
 ## Image size breakdown
 
-### Firefox image (~920 MB)
+### Firefox image (~953 MB)
 
 | Component            | Size    | Description                     |
 | -------------------- | ------- | ------------------------------- |
@@ -349,9 +349,9 @@ docker build -t docker-browser-vnc --build-arg BROWSER=chromium .
 | Fonts                | 134 MB  | Noto (111 MB), DejaVu, FreeFont |
 | Python + NumPy       | 87 MB   | Required for websockify         |
 | GTK, X11, other libs | ~280 MB | UI toolkit and X11 dependencies |
-| noVNC + VNC tools    | 6 MB    | Web VNC client, x11vnc, Xvfb    |
+| TigerVNC + noVNC     | ~40 MB  | VNC server (Xvnc) + web client  |
 
-### Chromium image (~1.02 GB)
+### Chromium image (~1.05 GB)
 
 | Component            | Size    | Description                               |
 | -------------------- | ------- | ----------------------------------------- |
@@ -360,7 +360,7 @@ docker build -t docker-browser-vnc --build-arg BROWSER=chromium .
 | Fonts                | 137 MB  | Noto (111 MB), DejaVu, FreeFont, OpenSans |
 | Python + NumPy       | 87 MB   | Required for websockify                   |
 | GTK, X11, other libs | ~350 MB | UI toolkit and X11 dependencies           |
-| noVNC + VNC tools    | 6 MB    | Web VNC client, x11vnc, Xvfb              |
+| TigerVNC + noVNC     | ~40 MB  | VNC server (Xvnc) + web client            |
 
 > **Note**: The base Alpine image is ~7 MB. Most of the image size comes from the browser and its graphical dependencies (Mesa/LLVM for GPU rendering, GTK for UI).
 
@@ -370,27 +370,31 @@ docker build -t docker-browser-vnc --build-arg BROWSER=chromium .
 Container startup sequence:
 ┌─────────────────────────────────────────────────────────┐
 │ supervisord (PID 1)                                     │
-│ ├── Xvfb (Virtual X Server)     → Display :0            │
-│ ├── x11vnc (VNC Server)         → Port 5901             │
+│ ├── Xvnc (TigerVNC X + VNC)     → Display :0, Port 5901 │
 │ ├── Openbox (Window Manager)    → Launches browser      │
-│ └── noVNC (Web Proxy)           → Port 6080             │
+│ ├── noVNC (Web Proxy)           → Port 6080             │
+│ └── resize-server (HTTP API)    → Port 6081             │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ### Components
 
-| Component       | Purpose                                         |
-| --------------- | ----------------------------------------------- |
-| **Xvfb**        | Virtual framebuffer X server (headless display) |
-| **x11vnc**      | VNC server exposing the X display               |
-| **Openbox**     | Minimal window manager                          |
-| **noVNC**       | HTML5 VNC client (web access)                   |
-| **websockify**  | WebSocket to VNC protocol proxy                 |
-| **supervisord** | Process manager                                 |
+| Component         | Purpose                                              |
+| ----------------- | ---------------------------------------------------- |
+| **Xvnc**          | TigerVNC: combined X server + VNC server             |
+| **Openbox**       | Minimal window manager                               |
+| **noVNC**         | HTML5 VNC client (web access)                        |
+| **websockify**    | WebSocket to VNC protocol proxy                      |
+| **resize-server** | HTTP API for dynamic resolution changes              |
+| **supervisord**   | Process manager                                      |
+
+### VNC Resize Support
+
+TigerVNC provides native **SetDesktopSize** support, allowing VNC clients (Guacamole, TigerVNC Viewer, RealVNC) to request resolution changes directly via the VNC protocol. This enables automatic resize when the client window is resized.
 
 ## Health check
 
-The container includes a health check that verifies both `x11vnc` and `Xvfb` processes are running:
+The container includes a health check that verifies the `Xvnc` process is running:
 
 - Interval: 30 seconds
 - Timeout: 10 seconds

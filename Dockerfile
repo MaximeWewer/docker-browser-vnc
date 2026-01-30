@@ -62,8 +62,7 @@ ENV DISPLAY=:0 \
 # ---------------------------------------------------------------------------
 RUN apk add --no-cache \
     # === X11 & VNC ===
-    xvfb \
-    x11vnc \
+    tigervnc \
     xrandr \
     libxcvt \
     # === Minimal Window Manager ===
@@ -154,7 +153,7 @@ EXPOSE 5901 6080 6081
 # Healthcheck
 # ---------------------------------------------------------------------------
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD pgrep -x "x11vnc" > /dev/null && pgrep -x "Xvfb" > /dev/null || exit 1
+    CMD pgrep -x "Xvnc" > /dev/null || exit 1
 
 # ---------------------------------------------------------------------------
 # User and entrypoint

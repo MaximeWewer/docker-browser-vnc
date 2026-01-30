@@ -38,11 +38,12 @@ log "Preparing directories..."
 mkdir -p ~/.vnc ~/.config/openbox ~/.mozilla/firefox ~/.config/chromium ~/Downloads
 
 # =============================================================================
-# Configure VNC password
+# Configure VNC password (TigerVNC format)
 # =============================================================================
 if [ -n "$VNC_PW" ]; then
     log "Setting VNC password..."
-    x11vnc -storepasswd "$VNC_PW" ~/.vnc/passwd 2>/dev/null || true
+    echo "$VNC_PW" | vncpasswd -f > ~/.vnc/passwd 2>/dev/null
+    chmod 600 ~/.vnc/passwd
 fi
 
 # =============================================================================

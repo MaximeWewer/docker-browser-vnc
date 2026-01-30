@@ -13,8 +13,8 @@ fi
 
 MODE_NAME="${WIDTH}x${HEIGHT}"
 
-# Try to set existing mode first
-if xrandr --output screen --mode "$MODE_NAME" 2>/dev/null; then
+# Try to set existing mode first (TigerVNC uses VNC-0 as output name)
+if xrandr --output VNC-0 --mode "$MODE_NAME" 2>/dev/null; then
     echo "Resolution changed to $MODE_NAME"
     exit 0
 fi
@@ -23,8 +23,8 @@ fi
 MODELINE=$(cvt "$WIDTH" "$HEIGHT" 60 2>/dev/null | grep Modeline | cut -d' ' -f3-)
 if [ -n "$MODELINE" ]; then
     xrandr --newmode "$MODE_NAME" $MODELINE 2>/dev/null || true
-    xrandr --addmode screen "$MODE_NAME" 2>/dev/null || true
-    xrandr --output screen --mode "$MODE_NAME" 2>/dev/null
+    xrandr --addmode VNC-0 "$MODE_NAME" 2>/dev/null || true
+    xrandr --output VNC-0 --mode "$MODE_NAME" 2>/dev/null
     echo "Resolution changed to $MODE_NAME"
 else
     echo "Error: Could not create mode $MODE_NAME"
