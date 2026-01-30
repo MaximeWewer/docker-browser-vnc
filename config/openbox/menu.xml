@@ -3,18 +3,13 @@
 
   <!-- Root menu (right-click on desktop) -->
   <menu id="root-menu" label="Menu">
-    <item label="Firefox">
+    <item label="Relaunch Browser">
       <action name="Execute">
-        <command>firefox</command>
-      </action>
-    </item>
-    <item label="Chromium">
-      <action name="Execute">
-        <command>chromium-browser</command>
+        <command>/usr/local/bin/relaunch-browser.sh</command>
       </action>
     </item>
     <separator/>
-    <item label="Reconfigure">
+    <item label="Reconfigure Openbox">
       <action name="Reconfigure"/>
     </item>
   </menu>

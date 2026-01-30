@@ -85,6 +85,7 @@ RUN apk add --no-cache \
     py3-numpy \
     # === Utilities ===
     procps \
+    xdotool \
     && \
     # === Cleanup ===
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
@@ -140,6 +141,7 @@ COPY --chmod=755 scripts/start.sh /start.sh
 COPY --chmod=755 scripts/launch-browser.sh /usr/local/bin/launch-browser.sh
 COPY --chmod=755 scripts/resize.sh /usr/local/bin/resize.sh
 COPY --chmod=755 scripts/resize-server.py /usr/local/bin/resize-server.py
+COPY --chmod=755 scripts/relaunch-browser.sh /usr/local/bin/relaunch-browser.sh
 
 # ---------------------------------------------------------------------------
 # Exposed ports

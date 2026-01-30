@@ -401,6 +401,36 @@ The container includes a health check that verifies the `Xvnc` process is runnin
 - Start period: 15 seconds
 - Retries: 3
 
+## Desktop features
+
+### Right-click menu
+
+Right-click on the desktop background to access the Openbox menu:
+
+- **Relaunch Browser**: Kills the current browser and relaunches it (useful if the browser becomes unresponsive or is accidentally closed)
+- **Reconfigure Openbox**: Reloads the window manager configuration
+
+### Window management
+
+- The browser window is maximized by default
+- Firefox: Window control buttons (minimize/close) are hidden by Openbox
+- Chromium: See known limitations below
+
+## Known limitations
+
+### Chromium window controls
+
+Chromium uses **client-side decorations** (CSD), meaning the browser draws its own title bar and window controls internally. This cannot be disabled by the window manager. As a result:
+
+- The **minimize** and **close** buttons remain visible in the Chromium title bar
+- If the user accidentally closes or minimizes Chromium, they can use the **right-click menu → Relaunch Browser** to restore it
+
+This is a GTK/Chromium design choice and cannot be changed without losing the tab bar entirely.
+
+### Firefox
+
+Firefox respects window manager settings, so minimize and close buttons are properly hidden.
+
 ## Security considerations
 
 - Container runs as non-root user (`user`, UID 1000)
