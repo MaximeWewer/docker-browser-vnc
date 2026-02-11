@@ -5,7 +5,7 @@
 #   - Built-in noVNC (web access without VNC client)
 #   - Firefox or Chromium (configurable via BROWSER env)
 #   - Persistent profile support (bookmarks, settings)
-#   - Openbox as minimal window manager
+#   - IceWM as lightweight window manager (with built-in taskbar)
 #   - Multi-stage build to reduce image size
 # =============================================================================
 
@@ -52,6 +52,8 @@ ENV DISPLAY=:0 \
     VNC_PW=changeme \
     # Starting URL (optional, uses browser profile settings if not set)
     STARTING_URL="" \
+    # Wallpaper URL (optional, downloads image at startup)
+    WALLPAPER_URL="" \
     # User home directory
     HOME=/home/user \
     # Disable interactive prompts
@@ -65,16 +67,17 @@ RUN apk add --no-cache \
     tigervnc \
     xrandr \
     libxcvt \
-    # === Minimal Window Manager ===
-    openbox \
-    xsetroot \
+    # === Lightweight Window Manager (with built-in taskbar) ===
+    # Install IceWM 4.x from Alpine Edge community (3.23 has 3.9)
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community icewm \
+    && apk add --no-cache \
+    # === Wallpaper ===
+    feh \
     # === Browser ===
     ${BROWSER} \
     # === Fonts (essential for web browsing) ===
     font-noto \
-    font-noto-cjk \
     font-noto-emoji \
-    ttf-freefont \
     ttf-dejavu \
     # === Runtime ===
     supervisor \
@@ -82,7 +85,6 @@ RUN apk add --no-cache \
     dbus \
     # === Python for websockify ===
     python3 \
-    py3-numpy \
     # === Utilities ===
     procps \
     xdotool \
@@ -91,11 +93,9 @@ RUN apk add --no-cache \
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 
 # ---------------------------------------------------------------------------
-# Copy noVNC from builder + inject auto-resize script
+# Copy noVNC from builder
 # ---------------------------------------------------------------------------
 COPY --from=novnc-builder /opt/noVNC /opt/noVNC
-COPY config/novnc/auto-resize.js /opt/noVNC/auto-resize.js
-RUN sed -i 's|</body>|<script src="auto-resize.js"></script></body>|' /opt/noVNC/vnc.html
 
 # ---------------------------------------------------------------------------
 # Create Firefox policies directory (writable at runtime)
@@ -106,7 +106,12 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
 # ---------------------------------------------------------------------------
 # Create mount point for user data
 # ---------------------------------------------------------------------------
-RUN mkdir -p /user-data && chmod 755 /user-data
+RUN mkdir -p /user-data/wallpaper && chmod 755 /user-data
+
+# ---------------------------------------------------------------------------
+# Copy default wallpaper
+# ---------------------------------------------------------------------------
+COPY assets/wallpaper/default-wallpaper.jpg /user-data/wallpaper/default.jpg
 
 # ---------------------------------------------------------------------------
 # Create non-root user
@@ -115,7 +120,7 @@ RUN adduser -D -u 1000 -h /home/user -s /bin/bash user && \
     # Create required directories
     mkdir -p \
         /home/user/.vnc \
-        /home/user/.config/openbox \
+        /home/user/.icewm \
         /home/user/.mozilla/firefox \
         /home/user/.config/chromium \
         /home/user/Downloads && \
@@ -123,11 +128,12 @@ RUN adduser -D -u 1000 -h /home/user -s /bin/bash user && \
     chown -R user:user /home/user
 
 # ---------------------------------------------------------------------------
-# Openbox configuration
+# IceWM configuration + Araita-Dark theme
 # ---------------------------------------------------------------------------
-COPY --chown=user:user config/openbox/rc.xml /home/user/.config/openbox/rc.xml
-COPY --chown=user:user config/openbox/autostart /home/user/.config/openbox/autostart
-COPY --chown=user:user config/openbox/menu.xml /home/user/.config/openbox/menu.xml
+COPY --chown=user:user config/icewm/preferences /home/user/.icewm/preferences
+COPY --chown=user:user config/icewm/winoptions /home/user/.icewm/winoptions
+COPY --chown=user:user config/icewm/themes/Araita-Dark /home/user/.icewm/themes/Araita-Dark
+COPY --chown=user:user config/icewm/menu /home/user/.icewm/menu
 
 # ---------------------------------------------------------------------------
 # Supervisord configuration
@@ -142,6 +148,8 @@ COPY --chmod=755 scripts/launch-browser.sh /usr/local/bin/launch-browser.sh
 COPY --chmod=755 scripts/resize.sh /usr/local/bin/resize.sh
 COPY --chmod=755 scripts/resize-server.py /usr/local/bin/resize-server.py
 COPY --chmod=755 scripts/relaunch-browser.sh /usr/local/bin/relaunch-browser.sh
+COPY --chmod=755 scripts/vnc-resize-init.sh /usr/local/bin/vnc-resize-init.sh
+RUN sed -i 's/\r$//' /usr/local/bin/vnc-resize-init.sh
 
 # ---------------------------------------------------------------------------
 # Exposed ports

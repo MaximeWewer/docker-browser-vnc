@@ -18,7 +18,14 @@ detect_browser() {
     fi
 }
 
-BROWSER=$(detect_browser)
+# Use BROWSER env var if set and valid, otherwise auto-detect
+if [ -n "$BROWSER" ] && command -v "$BROWSER" >/dev/null 2>&1; then
+    : # BROWSER env var is valid, keep it
+elif [ -n "$BROWSER" ] && command -v "${BROWSER}-browser" >/dev/null 2>&1; then
+    BROWSER="${BROWSER}-browser"
+else
+    BROWSER=$(detect_browser)
+fi
 
 log() { echo "[BROWSER] $1"; }
 
@@ -58,9 +65,6 @@ URL=$(get_start_url)
 
 # Display loading screen during startup
 show_loading_screen() {
-    # Dark gray background
-    xsetroot -solid "#2d2d2d" 2>/dev/null
-
     # Show loading message if xmessage is available
     if command -v xmessage >/dev/null 2>&1; then
         xmessage -center -timeout 30 "Loading..." &

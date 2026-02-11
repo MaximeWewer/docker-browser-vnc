@@ -27,6 +27,7 @@ echo -e "${BLUE}|${NC}  noVNC Port:  ${GREEN}${NOVNC_PORT:-6080}${NC}"
 echo -e "${BLUE}|${NC}  Resolution:  ${GREEN}${VNC_RESOLUTION:-1920x1080}${NC}"
 echo -e "${BLUE}|${NC}  Browser:     ${GREEN}${BROWSER:-firefox}${NC}"
 echo -e "${BLUE}|${NC}  Start URL:   ${GREEN}${STARTING_URL:-about:blank}${NC}"
+echo -e "${BLUE}|${NC}  Wallpaper:   ${GREEN}${WALLPAPER_URL:-default}${NC}"
 echo -e "${BLUE}+--------------------------------------------------------------------+${NC}"
 echo ""
 
@@ -35,7 +36,7 @@ echo ""
 # =============================================================================
 log "Preparing directories..."
 
-mkdir -p ~/.vnc ~/.config/openbox ~/.mozilla/firefox ~/.config/chromium ~/Downloads
+mkdir -p ~/.vnc ~/.icewm ~/.mozilla/firefox ~/.config/chromium ~/Downloads
 
 # =============================================================================
 # Configure VNC password (TigerVNC format)
@@ -188,27 +189,78 @@ setup_user_data() {
 setup_user_data
 
 # =============================================================================
-# Configure Openbox autostart
+# Setup wallpaper
+# Priority: /user-data/wallpaper/* > WALLPAPER_URL > default
 # =============================================================================
-log "Configuring Openbox autostart..."
+setup_wallpaper() {
+    local wallpaper_dest="/tmp/wallpaper.jpg"
 
-cat > ~/.config/openbox/autostart << EOF
+    # Priority 1: User-mounted wallpaper
+    if [ -d "/user-data/wallpaper" ] && [ -n "$(ls -A /user-data/wallpaper 2>/dev/null)" ]; then
+        local user_wallpaper
+        user_wallpaper=$(ls /user-data/wallpaper/* 2>/dev/null | head -1)
+        if [ -f "$user_wallpaper" ]; then
+            log "Using custom wallpaper from /user-data/wallpaper/"
+            cp "$user_wallpaper" "$wallpaper_dest"
+            return
+        fi
+    fi
+
+    # Priority 2: Download from URL
+    if [ -n "$WALLPAPER_URL" ]; then
+        log "Downloading wallpaper from: $WALLPAPER_URL"
+        if wget -q -O "$wallpaper_dest" "$WALLPAPER_URL" 2>/dev/null; then
+            log "Wallpaper downloaded successfully"
+            return
+        else
+            warn "Failed to download wallpaper from URL, falling back to default"
+        fi
+    fi
+
+    # Priority 3: No custom wallpaper - use theme background color (black)
+    log "No custom wallpaper configured, using theme background color"
+}
+
+setup_wallpaper
+
+# =============================================================================
+# Configure IceWM startup
+# =============================================================================
+log "Configuring IceWM startup..."
+
+cat > ~/.icewm/startup << 'STARTUP'
 #!/bin/sh
-# Autostart generated dynamically
+# Startup generated dynamically
 
-# Set background color
-xsetroot -solid "#1e1e2e" &
+# Set wallpaper
+apply_wallpaper() {
+    if [ -f /tmp/wallpaper.jpg ]; then
+        feh --bg-center --image-bg "#1e1e2e" /tmp/wallpaper.jpg 2>/dev/null
+    fi
+}
 
-# Set initial resolution
-/usr/local/bin/resize.sh ${VNC_RESOLUTION:-1920x1080} &
+apply_wallpaper
 
-# Wait for X to stabilize
-sleep 1
+# Background watcher: reapply wallpaper when resolution changes (native VNC resize)
+(
+    LAST_RES=""
+    while true; do
+        sleep 2
+        CUR_RES=$(xrandr 2>/dev/null | sed -n 's/.*current \([0-9]* x [0-9]*\).*/\1/p')
+        if [ -n "$CUR_RES" ] && [ "$CUR_RES" != "$LAST_RES" ]; then
+            if [ -n "$LAST_RES" ]; then
+                sleep 0.3
+                apply_wallpaper
+            fi
+            LAST_RES="$CUR_RES"
+        fi
+    done
+) &
 
 # Launch browser
 /usr/local/bin/launch-browser.sh &
-EOF
-chmod +x ~/.config/openbox/autostart
+STARTUP
+chmod +x ~/.icewm/startup
 
 # =============================================================================
 # Start D-Bus (required for Firefox)

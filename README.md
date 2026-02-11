@@ -6,7 +6,7 @@ A lightweight Docker container providing Firefox or Chromium browsers accessible
 
 - **Dual access**: Native VNC (port 5901) and web-based noVNC (port 6080)
 - **Browser choice**: Firefox or Chromium (configurable)
-- **Dynamic resolution**: Auto-resize button adapts resolution to browser window
+- **Dynamic resolution**: Native VNC resize support (noVNC, Guacamole, TigerVNC Viewer)
 - **Minimal footprint**: Alpine Linux with multi-stage build
 - **Persistent profiles**: Support for custom browser configurations, bookmarks, and policies
 - **Non-root execution**: Runs as unprivileged user for security
@@ -17,16 +17,20 @@ A lightweight Docker container providing Firefox or Chromium browsers accessible
 
 ```bash
 # Firefox (default)
-docker run -d -p 5901:5901 -p 6080:6080 -p 6081:6081 docker-browser-vnc
+docker run -d -p 5901:5901 -p 6080:6080 -p 6081:6081 \
+  docker-browser-vnc
 
 # Chromium
-docker run -d -p 5901:5901 -p 6080:6080 -p 6081:6081 -e BROWSER=chromium docker-browser-vnc
+docker run -d -p 5901:5901 -p 6080:6080 -p 6081:6081 \
+  docker-browser-vnc:chromium
 
 # Custom starting URL
 docker run -d -p 5901:5901 -p 6080:6080 -p 6081:6081 \
   -e STARTING_URL="https://example.com" \
   docker-browser-vnc
 ```
+
+> **Note**: The browser is selected at **build time** via the `BROWSER` build argument (see [Building](#building)).
 
 ### Using Docker compose
 
@@ -58,7 +62,7 @@ services:
 
 ## Accessing the browser
 
-- **Web Browser**: Navigate to `http://localhost:6080` - no VNC client required
+- **Web Browser (noVNC)**: Navigate to `http://localhost:6080/vnc.html?autoconnect=true&password=changeme&resize=remote`
 - **VNC Client**: Connect to `localhost:5901` with your preferred VNC viewer
 
 |                    noVNC Interface                    |                  noVNC Login                  |
@@ -79,6 +83,7 @@ services:
 | `VNC_PORT`       | `5901`      | Native VNC port                              |
 | `NOVNC_PORT`     | `6080`      | noVNC web port                               |
 | `STARTING_URL`   | _(empty)_   | Initial URL (uses profile settings if empty) |
+| `WALLPAPER_URL`  | _(empty)_   | URL to download a custom wallpaper image     |
 
 ## Exposed ports
 
@@ -96,6 +101,8 @@ Mount a volume to `/user-data` to customize browser profiles and settings. If no
 
 ```
 /user-data/
+├── wallpaper/
+│   └── my-wallpaper.jpg    # Custom desktop wallpaper
 ├── firefox-policies/
 │   └── policies.json       # Firefox enterprise policies
 ├── firefox-profile/
@@ -119,10 +126,42 @@ docker run -d -p 6080:6080 \
   docker-browser-vnc
 
 # Chromium with custom profile
-docker run -d -p 6080:6080 -e BROWSER=chromium \
+docker run -d -p 6080:6080 \
   -v /path/to/chromium-profile:/user-data/chromium-profile:ro \
+  docker-browser-vnc:chromium
+```
+
+## Desktop wallpaper
+
+The container includes a default wallpaper. You can customize the desktop background in three ways, listed by priority:
+
+### 1. Mount a wallpaper file (highest priority)
+
+Place an image in `/user-data/wallpaper/`:
+
+```bash
+docker run -d -p 6080:6080 \
+  -v /path/to/my-wallpaper.jpg:/user-data/wallpaper/wallpaper.jpg:ro \
   docker-browser-vnc
 ```
+
+Any common image format is supported (JPEG, PNG, etc.). The first file found in the directory is used.
+
+### 2. Download from URL
+
+Set the `WALLPAPER_URL` environment variable:
+
+```bash
+docker run -d -p 6080:6080 \
+  -e WALLPAPER_URL="https://example.com/wallpaper.jpg" \
+  docker-browser-vnc
+```
+
+### 3. Default
+
+If no custom wallpaper is mounted and no URL is set, the built-in default wallpaper is used. If the default wallpaper file is also missing, the desktop falls back to the theme's background color (black).
+
+> **Note**: The wallpaper is automatically reapplied when the resolution changes (e.g., via VNC resize).
 
 ---
 
@@ -299,18 +338,42 @@ Create `/user-data/chromium-profile/Bookmarks`:
 
 ## Dynamic resolution
 
-The container supports dynamic resolution changes (up to 4K) via the RANDR extension.
+The container supports dynamic resolution changes via TigerVNC's native **SetDesktopSize** support. The VNC resolution automatically adapts when the client window is resized.
 
-### Auto-resize button
+### noVNC (web access)
 
-A resize button is available in the top-right corner of the noVNC interface:
+Use `resize=remote` in the URL to enable automatic resolution matching:
 
-1. Open `http://localhost:6080/vnc.html?autoconnect=true`
-2. Click the **resize button** (top-right corner)
-3. When enabled (green), the resolution automatically adapts to your browser window size
-4. The setting is saved in localStorage
+```
+http://localhost:6080/vnc.html?autoconnect=true&password=changeme&resize=remote
+```
 
-![Auto-resize button](assets/images/auto_resize.png)
+You can also enable it manually from the noVNC settings panel: **Scaling mode → Remote resizing**.
+
+### Apache Guacamole
+
+The container includes a workaround (`vnc-resize-init.sh`) for a [libvncclient bug](https://github.com/LibVNC/libvncserver/issues/634) where `screen.id == 0` is filtered out in ExtDesktopSize handling. The script triggers an xrandr resolution bounce when a new VNC client connects, which initializes the screen data and enables Guacamole's VNC auto-resize.
+
+No special configuration is needed on the Guacamole side — just create a standard VNC connection.
+
+### Native VNC clients
+
+For direct VNC access, [TigerVNC Viewer](https://tigervnc.org/) is recommended (full SetDesktopSize support, cross-platform).
+
+**TigerVNC Viewer configuration**:
+
+1. Before connecting, click **Options**
+2. Go to the **Security** tab
+3. Uncheck all TLS/X509 options, keep only **VncAuth**
+4. Connect to `localhost:5901`
+
+| VNC Client      | SetDesktopSize | Compatibility           |
+| --------------- | -------------- | ----------------------- |
+| TigerVNC Viewer | Yes            | Excellent (recommended) |
+| RealVNC         | Yes            | Good                    |
+| Remmina         | Yes            | Good                    |
+| UltraVNC        | Partial        | Works, no auto-resize   |
+| TightVNC        | No             | Works, no auto-resize   |
 
 ### Resize API (port 6081)
 
@@ -326,95 +389,69 @@ curl "http://localhost:6081/resize?width=1920&height=1080"
 
 ## Building
 
-### Build with Firefox (default)
+### Build with Firefox
 
 ```bash
-docker build -t docker-browser-vnc .
+docker build -t docker-browser-vnc --build-arg BROWSER=firefox .
 ```
 
 ### Build with Chromium
 
 ```bash
-docker build -t docker-browser-vnc --build-arg BROWSER=chromium .
+docker build -t docker-browser-vnc:chromium --build-arg BROWSER=chromium .
 ```
 
 ## Image size breakdown
 
-### Firefox image (~953 MB)
+### Firefox image (~798 MB)
 
-| Component            | Size    | Description                     |
-| -------------------- | ------- | ------------------------------- |
-| Firefox              | 240 MB  | Browser binaries and resources  |
-| LLVM/Mesa            | 170 MB  | Graphics rendering (OpenGL)     |
-| Fonts                | 134 MB  | Noto (111 MB), DejaVu, FreeFont |
-| Python + NumPy       | 87 MB   | Required for websockify         |
-| GTK, X11, other libs | ~280 MB | UI toolkit and X11 dependencies |
-| TigerVNC + noVNC     | ~40 MB  | VNC server (Xvnc) + web client  |
+| Component            | Size    | Description                        |
+| -------------------- | ------- | ---------------------------------- |
+| Firefox              | 240 MB  | Browser binaries and resources     |
+| LLVM/Mesa            | 171 MB  | Graphics rendering (OpenGL)        |
+| Fonts                | 33 MB   | Noto, Emoji, DejaVu                |
+| Python               | 47 MB   | Required for websockify/supervisor |
+| GTK, X11, other libs | ~290 MB | UI toolkit and X11 dependencies    |
+| TigerVNC + noVNC     | ~6 MB   | VNC server (Xvnc) + web client     |
 
-### Chromium image (~1.05 GB)
+### Chromium image (~887 MB)
 
-| Component            | Size    | Description                               |
-| -------------------- | ------- | ----------------------------------------- |
-| Chromium             | 267 MB  | Browser binaries and resources            |
-| LLVM/Mesa            | 170 MB  | Graphics rendering (OpenGL)               |
-| Fonts                | 137 MB  | Noto (111 MB), DejaVu, FreeFont, OpenSans |
-| Python + NumPy       | 87 MB   | Required for websockify                   |
-| GTK, X11, other libs | ~350 MB | UI toolkit and X11 dependencies           |
-| TigerVNC + noVNC     | ~40 MB  | VNC server (Xvnc) + web client            |
+| Component            | Size    | Description                          |
+| -------------------- | ------- | ------------------------------------ |
+| Chromium             | 268 MB  | Browser binaries and resources       |
+| LLVM/Mesa            | 171 MB  | Graphics rendering (OpenGL)          |
+| Fonts                | 36 MB   | Noto, Emoji, DejaVu, OpenSans        |
+| Python               | 47 MB   | Required for websockify/supervisor   |
+| GTK, X11, other libs | ~350 MB | UI toolkit and X11 dependencies      |
+| TigerVNC + noVNC     | ~6 MB   | VNC server (Xvnc) + web client       |
 
-> **Note**: The base Alpine image is ~7 MB. Most of the image size comes from the browser and its graphical dependencies (Mesa/LLVM for GPU rendering, GTK for UI).
+> **Note**: The base Alpine image is ~8 MB. Most of the image size comes from the browser and its graphical dependencies (Mesa/LLVM for GPU rendering, GTK for UI). Add `font-noto-cjk` (~88 MB) to the Dockerfile if you need Chinese/Japanese/Korean support.
 
 ## Architecture
 
 ```
 Container startup sequence:
-┌─────────────────────────────────────────────────────────┐
-│ supervisord (PID 1)                                     │
-│ ├── Xvnc (TigerVNC X + VNC)     → Display :0, Port 5901 │
-│ ├── Openbox (Window Manager)    → Launches browser      │
-│ ├── noVNC (Web Proxy)           → Port 6080             │
-│ └── resize-server (HTTP API)    → Port 6081             │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ supervisord (PID 1)                                          │
+│ ├── Xvnc (TigerVNC X + VNC)      → Display :0, Port 5901     │
+│ ├── IceWM (Window Manager)       → Launches browser          │
+│ ├── noVNC (Web Proxy)            → Port 6080                 │
+│ ├── vnc-resize-init              → Guacamole resize fix      │
+│ └── resize-server (HTTP API)     → Port 6081                 │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Components
 
-| Component         | Purpose                                  |
-| ----------------- | ---------------------------------------- |
-| **Xvnc**          | TigerVNC: combined X server + VNC server |
-| **Openbox**       | Minimal window manager                   |
-| **noVNC**         | HTML5 VNC client (web access)            |
-| **websockify**    | WebSocket to VNC protocol proxy          |
-| **resize-server** | HTTP API for dynamic resolution changes  |
-| **supervisord**   | Process manager                          |
-
-### VNC resize support
-
-TigerVNC provides native **SetDesktopSize** support, allowing VNC clients to request resolution changes directly via the VNC protocol. This enables automatic resize when the client window is resized.
-
-**Recommended VNC client**: [TigerVNC Viewer](https://tigervnc.org/)
-
-TigerVNC Viewer is recommended because:
-
-- Full **SetDesktopSize** support (automatic resize when you resize the viewer window)
-- Best compatibility with TigerVNC server
-- Available on Windows, macOS, and Linux
-
-**TigerVNC Viewer configuration**:
-
-1. Before connecting, click **Options**
-2. Go to the **Security** tab
-3. Uncheck all TLS/X509 options
-4. Keep only **VncAuth** checked
-5. Connect to `localhost:5901`
-
-| VNC Client      | SetDesktopSize | Compatibility           |
-| --------------- | -------------- | ----------------------- |
-| TigerVNC Viewer | Yes            | Excellent (recommended) |
-| RealVNC         | Yes            | Good                    |
-| Remmina         | Yes            | Good                    |
-| UltraVNC        | Partial        | Works, no auto-resize   |
-| TightVNC        | No             | Works, no auto-resize   |
+| Component            | Purpose                                           |
+| -------------------- | ------------------------------------------------- |
+| **Xvnc**             | TigerVNC: combined X server + VNC server          |
+| **IceWM**            | Lightweight window manager (Araita-Dark theme)    |
+| **noVNC**            | HTML5 VNC client (web access)                     |
+| **websockify**       | WebSocket to VNC protocol proxy                   |
+| **vnc-resize-init**  | Workaround for libvncclient screen init bug       |
+| **resize-server**    | HTTP API for dynamic resolution changes           |
+| **supervisord**      | Process manager                                   |
 
 ## Health check
 
@@ -424,36 +461,6 @@ The container includes a health check that verifies the `Xvnc` process is runnin
 - Timeout: 10 seconds
 - Start period: 15 seconds
 - Retries: 3
-
-## Desktop features
-
-### Right-click menu
-
-Right-click on the desktop background to access the Openbox menu:
-
-- **Relaunch Browser**: Kills the current browser and relaunches it (useful if the browser becomes unresponsive or is accidentally closed)
-- **Reconfigure Openbox**: Reloads the window manager configuration
-
-### Window management
-
-- The browser window is maximized by default
-- Firefox: Window control buttons (minimize/close) are hidden by Openbox
-- Chromium: See known limitations below
-
-## Known limitations
-
-### Chromium window controls
-
-Chromium uses **client-side decorations** (CSD), meaning the browser draws its own title bar and window controls internally. This cannot be disabled by the window manager. As a result:
-
-- The **minimize** and **close** buttons remain visible in the Chromium title bar
-- If the user accidentally closes or minimizes Chromium, they can use the **right-click menu → Relaunch Browser** to restore it
-
-This is a GTK/Chromium design choice and cannot be changed without losing the tab bar entirely.
-
-### Firefox
-
-Firefox respects window manager settings, so minimize and close buttons are properly hidden.
 
 ## Security considerations
 

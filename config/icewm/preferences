@@ -1,0 +1,60 @@
+# =============================================================================
+# IceWM Preferences - Lightweight VNC Browser Container
+# =============================================================================
+
+# --- Focus ---
+FocusMode=1
+ClickToFocus=1
+FocusNewWindows=1
+RaiseOnFocus=0
+RaiseOnClickFrame=1
+
+# --- Taskbar ---
+ShowTaskBar=1
+TaskBarAtTop=0
+TaskBarAutoHide=0
+TaskBarShowClock=0
+TaskBarShowStartMenu=0
+TaskBarShowShowDesktopButton=0
+TaskBarShowWindowListMenu=0
+TaskBarShowAllWindows=1
+TaskBarShowWorkspaces=0
+TaskBarShowMailboxStatus=0
+TaskBarShowCPUStatus=0
+TaskBarShowMEMStatus=0
+TaskBarShowNetStatus=0
+TaskBarShowApm=0
+TaskBarShowAPMTime=0
+TaskBarShowAPMStatus=0
+TaskBarShowAPMGraph=0
+TaskBarShowAPMAuto=0
+TaskBarShowCollapseButton=0
+TaskBarShowDesktopButton=0
+TaskBarShowTray=0
+
+# --- Workspaces ---
+WorkspaceNames=" Desktop "
+
+# --- Windows ---
+OpaqueMove=1
+OpaqueResize=1
+CenterTransientsOnOwner=1
+
+# --- Edge ---
+EdgeSwitch=0
+EdgeResistance=10
+
+# --- Theme ---
+Theme="Araita-Dark/default.theme"
+
+# --- Misc ---
+ConfirmLogout=0
+UseRootMenu=0
+ShowProgramsMenu=0
+ShowSettingsMenu=0
+ShowFocusModeMenu=0
+ShowThemesMenu=0
+ShowLogoutMenu=0
+ShowLogoutSubMenu=0
+ShowWindowList=0
+ShowHelp=0

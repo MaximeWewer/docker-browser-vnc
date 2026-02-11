@@ -1,0 +1,15 @@
+# =============================================================================
+# IceWM Window Options - Per-application rules
+# Format: name.class.option: value
+# =============================================================================
+
+# Firefox - maximize by default
+firefox.Firefox.startMaximized: 1
+Navigator.Firefox.startMaximized: 1
+
+# Chromium - maximize by default
+chromium-browser.Chromium-browser.startMaximized: 1
+Chromium-browser.Chromium-browser.startMaximized: 1
+
+# Fallback - maximize all normal windows
+.startMaximized: 1
